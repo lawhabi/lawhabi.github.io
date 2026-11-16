@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>LawhaBI</title>
+<style>
+  :root { --ink:#16202b; --ink2:#51606f; --line:#d9dfe6; --bg:#f3f5f8; --card:#fff; --accent:#1f5fae; --navy:#14263b; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 16px; background:var(--bg); color:var(--ink); font:15px/1.45 "Segoe UI", system-ui, -apple-system, Arial, sans-serif; }
+  .cbox { max-width:440px; margin:0 auto; background:var(--card); border:1px solid var(--line); border-radius:12px; padding:26px 28px; box-shadow:0 6px 24px rgba(20,38,59,.08); }
+  h1 { margin:0; font-size:21px; color:var(--navy); } .csub { margin:4px 0 16px; color:var(--ink2); }
+  label { display:block; margin:0 0 12px; font-size:13.5px; font-weight:600; }
+  input[type=text], input[type=email], input[type=password] { display:block; width:100%; margin-top:4px; padding:9px 10px; font-size:15px; border:1px solid var(--line); border-radius:7px; }
+  .ctick { display:flex; gap:8px; align-items:flex-start; font-weight:400; } .ctick input { margin-top:3px; }
+  button { font:inherit; padding:9px 14px; border-radius:7px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; } button[disabled] { opacity:.6; cursor:default; }
+  form button[type=submit] { width:100%; padding:10px; }
+  button.link { background:none; border:0; padding:0; color:var(--accent); font-weight:600; text-decoration:underline; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; }
+  .cswitch { margin:14px 0 0; font-size:14px; color:var(--ink2); } .small { font-size:13px; color:var(--ink2); margin:10px 0 0; }
+  .cmsg { margin:0 0 14px; padding:9px 12px; border-radius:7px; background:#fde8e8; color:#8a1c1c; font-size:14px; } .cmsg.ok { background:#e6f4ea; color:#1e5c2e; }
+  .cnote { margin:18px 0 0; padding:12px 14px; border-radius:8px; background:#f3f5f8; font-size:12.5px; color:var(--ink2); } .cnote ul { margin:6px 0 0; padding-left:18px; } .cnote li { margin:3px 0; }
+</style>
+</head>
+<body>
+<div class="cbox" id="box"><h1>LawhaBI</h1><p class="csub">One moment…</p></div>
+<noscript><p style="text-align:center">This tool needs JavaScript.</p></noscript>
+<script>
+// The public sign-in page of the LawhaBI web edition. It holds no rule and no text of the tool: after a sign-in by
+// an approved account it asks the server for the tool and puts it in place of itself. The session it keeps in the browser is the
+// one the tool then uses.
+(function () {
+  'use strict';
+  var CLOUD = { url: "https://lulfkmiabixcbznwginl.supabase.co", key: "sb_publishable__IorC4tAimE95Jh3FVeBww_5gMPy-XO", domains: [] };   /*CLOUD-CONFIG*/
+  var CSESS = 'bi-builder.cloud.session', S = { view: 'loading', msg: '', good: false, busy: false, email: '', name: '', session: null };
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function req(path, body, token) {
+    var hd = { 'Content-Type': 'application/json', apikey: CLOUD.key }; if (token) hd.Authorization = 'Bearer ' + token;
+    return fetch(CLOUD.url + path, { method: 'POST', headers: hd, body: JSON.stringify(body || {}) }).then(function (r) {
+      return r.text().then(function (t) { var d = null; try { d = t ? JSON.parse(t) : null; } catch (e) {} return { ok: r.ok, status: r.status, data: d, text: t }; });
+    }, function () { return { ok: false, status: 0, data: null, text: '' }; });
+  }
+  var MSG = {
+    offline: 'No connection to the server. Check the internet connection and try again.',
+    invalid_credentials: 'The e-mail address or the password is not right.',
+    user_already_exists: 'An account with this e-mail address already exists. Sign in instead.',
+    weak_password: 'Choose a longer password (8 characters or more).',
+    unexpected_failure: 'The account could not be created. Only company e-mail addresses can have an account.',
+    signup_domain_not_allowed: 'Only company e-mail addresses can have an account.',
+    email_not_confirmed: 'This account is not switched on yet. Ask the administrator of the tool.',
+    signup_disabled: 'New accounts are closed for the moment.',
+    over_request_rate_limit: 'Too many tries. Wait a few minutes and try again.'
+  };
+  function say(x) { var d = x.data || {}, c = x.status === 0 ? 'offline' : String(d.error_code || d.message || d.msg || d.error || ('error ' + x.status)); return MSG[c] || 'Something went wrong (' + c.slice(0, 80) + '). Try again.'; }
+  function keep(s) { S.session = s; try { if (s) localStorage.setItem(CSESS, JSON.stringify(s)); else localStorage.removeItem(CSESS); } catch (e) {} }
+  function take(d) { if (!d || !d.access_token) return false; var o = S.session || {}; keep({ at: d.access_token, rt: d.refresh_token, exp: Date.now() + (+d.expires_in || 3600) * 1000, user: d.user ? d.user.id : o.user, email: d.user ? d.user.email : o.email }); return true; }
+  function token() {
+    var s = S.session; if (!s) return Promise.resolve('');
+    if (s.exp - Date.now() > 60000) return Promise.resolve(s.at);
+    return req('/auth/v1/token?grant_type=refresh_token', { refresh_token: s.rt }).then(function (x) { if (x.ok && take(x.data)) return S.session.at; if (x.status === 0) return s.at; keep(null); return ''; });
+  }
+  var NOTE = '<div class="cnote"><b>What is stored and who sees it</b><ul>' +
+    '<li><b>Your account:</b> your company e-mail address, your name, when you signed up and when you last used the tool.</li>' +
+    '<li><b>Your projects:</b> everything you enter is saved in the tool\'s database so you can find it again. Other users cannot see your projects.</li>' +
+    '<li><b>How you use the tool:</b> actions such as opening a project or generating a mockup are recorded with the time, to improve the tool.</li>' +
+    '<li><b>Claude:</b> the Claude buttons send the text the tool prepares to Anthropic\'s Claude service through the tool\'s server, never the client\'s name or logo. The number of requests and their cost are recorded per user; each user has a monthly budget.</li>' +
+    '<li><b>Who can see this:</b> only the administrator of the tool. Nothing is sold or shared.</li>' +
+    '<li><b>During the beta:</b> use fictional or approved client information only. The service is free and comes without guarantee; export your projects to a file regularly.</li>' +
+    '<li><b>The tool belongs to its author.</b> It is for your work in the company; do not copy it or pass it on.</li></ul></div>';
+  function draw() {
+    var v = S.view, msg = S.msg ? '<p class="cmsg' + (S.good ? ' ok' : '') + '" role="alert">' + esc(S.msg) + '</p>' : '', dis = S.busy ? ' disabled' : '', h = '<h1>LawhaBI</h1>';
+    if (v === 'signin' || v === 'signup') { var up = v === 'signup';
+      h = '<form id="f" data-kind="' + v + '" novalidate>' + h + '<p class="csub">' + (up ? 'Create your account' : 'Sign in to your projects') + '</p>' + msg +
+        (up ? '<label>Your name<input type="text" id="cName" autocomplete="name" maxlength="120" value="' + esc(S.name) + '"></label>' : '') +
+        '<label>Company e-mail address<input type="email" id="cEmail" autocomplete="username" value="' + esc(S.email) + '"></label>' +
+        '<label>Password' + (up ? ' (8 characters or more)' : '') + '<input type="password" id="cPass" autocomplete="' + (up ? 'new-password' : 'current-password') + '"></label>' +
+        (up ? '<label class="ctick"><input type="checkbox" id="cTerms"><span>I have read the note below and I accept it.</span></label>' : '') +
+        '<button type="submit" class="primary"' + dis + '>' + (S.busy ? 'One moment…' : up ? 'Create account' : 'Sign in') + '</button>' +
+        '<p class="cswitch">' + (up ? 'Already have an account? <button type="button" class="link" data-go="signin">Sign in</button>' : 'No account yet? <button type="button" class="link" data-go="signup">Create one</button>') + '</p>' +
+        (up ? NOTE : '<p class="small">Forgotten your password? Ask the administrator of the tool to reset it.</p>') + '</form>';
+    } else if (v === 'waiting') {
+      h += '<p class="csub">Your account is waiting for approval</p>' + msg + '<p>The account <b>' + esc((S.session && S.session.email) || '') + '</b> was created. The administrator of the tool has to approve it before you can use it. Come back later, or click below once you are told it is done.</p>' +
+        '<div class="row"><button type="button" class="primary" data-go="check"' + dis + '>' + (S.busy ? 'Checking…' : 'Check again') + '</button><button type="button" data-go="signout">Sign out</button></div>';
+    } else if (v === 'failed') {
+      h += '<p class="csub">The tool could not be opened</p>' + msg + '<div class="row"><button type="button" class="primary" data-go="check">Try again</button><button type="button" data-go="signout">Sign out</button></div>';
+    } else h += '<p class="csub">' + esc(S.msg || 'One moment…') + '</p>';
+    $('box').innerHTML = h;
+  }
+  function show(v, msg, good) { S.view = v; S.msg = msg || ''; S.good = !!good; S.busy = false; draw(); }
+  // signed in: is the account approved? then the tool is asked from the server and takes the place of this page
+  function enter() {
+    show('loading', 'Opening the tool…');
+    return token().then(function (t) {
+      if (!t) { show('signin', S.session ? MSG.offline : ''); return; }
+      return req('/rest/v1/rpc/my_profile', {}, t).then(function (p) {
+        if (!p.ok) { if (p.status === 0) { show('failed', MSG.offline); return; } keep(null); show('signin', p.status === 401 ? 'Please sign in again.' : say(p)); return; }
+        if (!p.data || p.data.approved !== true) { show('waiting'); return; }
+        return req('/functions/v1/app', {}, t).then(function (a) {
+          if (a.status === 200 && /^\s*<!doctype html/i.test(a.text)) { document.open(); document.write(a.text); document.close(); return; }
+          if (a.status === 401) { keep(null); show('signin', 'Please sign in again.'); }
+          else if (a.status === 403) show('waiting');
+          else show('failed', a.status === 0 ? MSG.offline : 'The server did not send the tool (' + a.status + '). Try again in a minute.');
+        });
+      });
+    });
+  }
+  function submit(kind) {
+    if (S.busy) return;
+    var email = ($('cEmail').value || '').trim().toLowerCase(), pass = $('cPass').value || '', name = $('cName') ? ($('cName').value || '').trim() : '', up = kind === 'signup';
+    S.email = email; S.name = name;
+    var bad = !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? 'Enter your company e-mail address.' :
+      up && CLOUD.domains && CLOUD.domains.length && CLOUD.domains.indexOf(email.split('@')[1]) < 0 ? 'Only ' + CLOUD.domains.map(function (x) { return '@' + x; }).join(' or ') + ' addresses can create an account.' :
+      up && !name ? 'Enter your name.' : !pass ? 'Enter your password.' : up && pass.length < 8 ? MSG.weak_password : up && !$('cTerms').checked ? 'Tick the box to accept the note below.' : '';
+    if (bad) { show(kind, bad); return; }
+    S.busy = true; S.msg = ''; draw();
+    req(up ? '/auth/v1/signup' : '/auth/v1/token?grant_type=password', up ? { email: email, password: pass, data: { full_name: name } } : { email: email, password: pass }).then(function (x) {
+      pass = '';
+      if (x.ok && take(x.data)) { try { sessionStorage.setItem('bi-builder.cloud.fresh', '1'); } catch (e) {} return enter(); }
+      if (x.ok) { show('signin', 'Your account was created. The administrator of the tool has to switch it on before you can sign in.', true); return; }
+      show(kind, say(x));
+    });
+  }
+  document.addEventListener('submit', function (ev) { if (ev.target && ev.target.id === 'f') { ev.preventDefault(); submit(ev.target.getAttribute('data-kind')); } });
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest && ev.target.closest('[data-go]'); if (!b) return; var go = b.getAttribute('data-go');
+    if (go === 'signin' || go === 'signup') { S.email = $('cEmail') ? $('cEmail').value.trim() : S.email; show(go); }
+    else if (go === 'check') { S.busy = true; draw(); enter().then(function () { if (S.view === 'waiting') show('waiting', 'Not approved yet.'); }); }
+    else if (go === 'signout') { var s = S.session; if (s) req('/auth/v1/logout', {}, s.at); keep(null); show('signin'); }
+  });
+  if (!CLOUD.url || !CLOUD.key) { show('failed', 'This page was not built: run web-edition\\build.ps1.'); return; }
+  var s0 = null; try { s0 = JSON.parse(localStorage.getItem(CSESS) || 'null'); } catch (e) {}
+  S.session = s0 && s0.at && s0.rt ? s0 : null;
+  if (S.session) enter(); else show('signin');
+})();
+</script>
+</body>
+</html>
