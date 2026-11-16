@@ -105,6 +105,7 @@
         (up ? '<label>Your name<input type="text" id="cName" autocomplete="name" maxlength="120" value="' + esc(S.name) + '"></label>' : '') +
         '<label>Company e-mail address<input type="email" id="cEmail" autocomplete="username" value="' + esc(S.email) + '"></label>' +
         '<label>Password' + (up ? ' (8 characters or more)' : '') + '<input type="password" id="cPass" autocomplete="' + (up ? 'new-password' : 'current-password') + '"></label>' +
+        (up ? '<label>Confirm password<input type="password" id="cPass2" autocomplete="new-password"></label>' : '') +
         (up ? '<label class="ctick"><input type="checkbox" id="cTerms"><span>I have read the note below and I accept it.</span></label>' : '') +
         '<button type="submit" class="primary"' + dis + '>' + (S.busy ? 'One moment…' : up ? 'Create account' : 'Sign in') + '</button>' +
         '<p class="cswitch">' + (up ? 'Already have an account? <button type="button" class="link" data-go="signin">Sign in</button>' : 'No account yet? <button type="button" class="link" data-go="signup">Create one</button>') + '</p>' +
@@ -137,15 +138,15 @@
   }
   function submit(kind) {
     if (S.busy) return;
-    var email = ($('cEmail').value || '').trim().toLowerCase(), pass = $('cPass').value || '', name = $('cName') ? ($('cName').value || '').trim() : '', up = kind === 'signup';
+    var email = ($('cEmail').value || '').trim().toLowerCase(), pass = $('cPass').value || '', pass2 = $('cPass2') ? $('cPass2').value || '' : '', name = $('cName') ? ($('cName').value || '').trim() : '', up = kind === 'signup';
     S.email = email; S.name = name;
     var bad = !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) ? 'Enter your company e-mail address.' :
       up && CLOUD.domains && CLOUD.domains.length && CLOUD.domains.indexOf(email.split('@')[1]) < 0 ? 'Only ' + CLOUD.domains.map(function (x) { return '@' + x; }).join(' or ') + ' addresses can create an account.' :
-      up && !name ? 'Enter your name.' : !pass ? 'Enter your password.' : up && pass.length < 8 ? MSG.weak_password : up && !$('cTerms').checked ? 'Tick the box to accept the note below.' : '';
+      up && !name ? 'Enter your name.' : !pass ? 'Enter your password.' : up && pass.length < 8 ? MSG.weak_password : up && pass !== pass2 ? 'The two passwords are not the same. Type them again.' : up && !$('cTerms').checked ? 'Tick the box to accept the note below.' : '';
     if (bad) { show(kind, bad); return; }
     S.busy = true; S.msg = ''; draw();
     req(up ? '/auth/v1/signup' : '/auth/v1/token?grant_type=password', up ? { email: email, password: pass, data: { full_name: name } } : { email: email, password: pass }).then(function (x) {
-      pass = '';
+      pass = ''; pass2 = '';
       if (x.ok && take(x.data)) { try { sessionStorage.setItem('bi-builder.cloud.fresh', '1'); } catch (e) {} return enter(); }
       if (x.ok) { show('signin', 'Your account was created. The administrator of the tool has to switch it on before you can sign in.', true); return; }
       show(kind, say(x));
